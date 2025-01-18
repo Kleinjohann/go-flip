@@ -23,14 +23,14 @@ const (
     gridWidth    = 32
     gridHeight   = 32
     numParticles = gridWidth * gridHeight * 4
+    initMinHeight = 0.5
     picRatio     = 0.05
     flipRatio    = 1 - picRatio
 
-    // TODO: cross-check scaling for the implicit dx=1
-    //       maybe add dx parameter and compare to other implementations
     gravity      = 980
     density      = .001
     timeStep     = 0.01
+    resetDistance = 0.1 // distance from solid cells to reset particles entering them
     solverTolerance = 0.000001
     solverIterations = 1000
 
@@ -181,7 +181,7 @@ func (g *Grid) MultiplyNeighbourMatrix(vector *[gridWidth][gridHeight]float64,
     var numNeighbours float64
     for i := 1; i < gridWidth - 1; i++ {
         for j := 1; j < gridHeight - 1; j++ {
-            if g.cellContents[i][j] != SOLID {
+            if g.cellContents[i][j] == FLUID {
                 numNeighbours = float64(g.neighbourInfo[i][j] & neighbourCountMask)
                 output[i][j] = vector[i][j] * numNeighbours
                 if g.neighbourInfo[i][j] & leftNeighbour != 0 {
@@ -212,10 +212,6 @@ func scalarProduct(a *[gridWidth][gridHeight]float64, b *[gridWidth][gridHeight]
 }
 
 func (g *Grid) SolvePressure() {
-    // TODO: profile and optimise
-    // TODO: nothing moving is a solution, even if there is air below water
-    //       if the water gathers at the bottom it slowly compresses
-    //       in the compression case the solver never converges within the limit
     var residual [gridWidth][gridHeight]float64
     var stepDirection [gridWidth][gridHeight]float64
     var sigma, sigmaOld, relTolerance, alpha, beta float64
@@ -248,7 +244,6 @@ func (g *Grid) SolvePressure() {
         sigmaOld = sigma
         sigma = scalarProduct(&residual, &residual)
         if sigma < relTolerance {
-            print("solver converged after ", k, " iterations\n")
             return
         }
         beta = sigma / sigmaOld
@@ -386,11 +381,6 @@ func (g *Grid) UpdateParticles() {
         g.particles.positions[i][1] = y
         cellX := int(x)
         cellY := int(y)
-        if cellX < 0 || cellX >= gridWidth || cellY < 0 || cellY >= gridHeight {
-            print("out of bounds: ", cellX, " ", cellY, "\n")
-            print("position: ", x, " ", y, "\n")
-            print("velocity: ", vx, " ", vy, "\n")
-        }
         if (cellX < 0 || cellX > gridWidth - 1 ||
             cellY < 0 || cellY > gridHeight - 1) ||
             g.cellContents[cellX][cellY] == SOLID {
@@ -412,14 +402,14 @@ func (g *Grid) UpdateParticles() {
                     }
                     if g.cellContents[newCellX][newCellY] != SOLID {
                         if xDirection == -1 {
-                            g.particles.positions[i][0] = float64(newCellX) + .99
+                            g.particles.positions[i][0] = float64(newCellX) + resetDistance
                         } else if xDirection == 1 {
-                            g.particles.positions[i][0] = float64(newCellX)
+                            g.particles.positions[i][0] = float64(newCellX) + 1 - resetDistance
                         }
                         if yDirection == -1 {
-                            g.particles.positions[i][1] = float64(newCellY) + .99
+                            g.particles.positions[i][1] = float64(newCellY) + resetDistance
                         } else if yDirection == 1 {
-                            g.particles.positions[i][1] = float64(newCellY)
+                            g.particles.positions[i][1] = float64(newCellY) + 1 - resetDistance
                         }
                         return
                     }
@@ -502,7 +492,6 @@ type Game struct {
 func NewGrid(width, height int) *Grid {
     var g Grid
 
-    // set cells on the edge to solid
     for i := 0; i < width; i++ {
         g.cellContents[i][0] = SOLID
         g.cellContents[i][height-1] = SOLID
@@ -517,8 +506,8 @@ func NewGrid(width, height int) *Grid {
 
     for i := 0; i < numParticles; i++ {
         g.particles.positions[i] = [2]float64{rand.Float64() * float64(usableWidth) + 1,
-                                             rand.Float64() * float64(usableHeight) + 1}
-        g.particles.velocities[i] = [2]float64{0, 0}
+                                             (initMinHeight + (1-initMinHeight)*rand.Float64()) * float64(usableHeight) + 1}
+        g.particles.velocities[i] = [2]float64{100, -100}
     }
 
     return &g
