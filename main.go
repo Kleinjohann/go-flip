@@ -262,12 +262,12 @@ func isnan(x float64) bool {
     return x != x
 }
 
-func (g *Grid) CheckPressure() {
+func (g *Grid) ClampPressure() {
     for i := 0; i < gridWidth; i++ {
         for j := 0; j < gridHeight; j++ {
             if g.cellContents[i][j] == FLUID {
-                if isnan(g.cellPressures[i][j]) {
-                    print("NaN pressure: ", i, " ", j, "\n")
+                if g.cellPressures[i][j] < 0 {
+                    g.cellPressures[i][j] = 0
                 }
             }
         }
@@ -431,7 +431,7 @@ func (g *Grid) ApplyGravity() {
 func (g *Grid) MakeIncompressible() {
     g.CalculateDivergences()
     g.SolvePressure()
-    // g.CheckPressure()
+    g.ClampPressure()
     g.ApplyPressure()
 }
 
