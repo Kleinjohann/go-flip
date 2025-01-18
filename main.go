@@ -135,7 +135,9 @@ func (g *Grid) ParticlesToGrid() {
     g.verticalEdgeVelocities = [gridWidth][gridHeight+1]float64{}
     for i := 1; i < gridWidth - 1; i++ {
         for j := 1; j < gridHeight - 1; j++ {
-            g.cellContents[i][j] = EMPTY
+            if g.cellContents[i][j] == FLUID {
+                g.cellContents[i][j] = EMPTY
+            }
         }
     }
     for i := 0; i < numParticles; i++ {
@@ -500,14 +502,19 @@ func NewGrid(width, height int) *Grid {
         g.cellContents[0][i] = SOLID
         g.cellContents[width-1][i] = SOLID
     }
+    for  i:=int(float64(width)*0.4); i<int(float64(width)*0.9); i++ {
+        for j:=int(float64(height)*0.4); j<int(float64(height)*0.6); j++ {
+            g.cellContents[i][j] = SOLID
+        }
+    }
 
     usableWidth := width - 2
     usableHeight := height - 2
 
     for i := 0; i < numParticles; i++ {
-        g.particles.positions[i] = [2]float64{rand.Float64() * float64(usableWidth) + 1,
+        g.particles.positions[i] = [2]float64{(initMinHeight + (1-initMinHeight)*rand.Float64()) * float64(usableWidth) + 1,
                                              (initMinHeight + (1-initMinHeight)*rand.Float64()) * float64(usableHeight) + 1}
-        g.particles.velocities[i] = [2]float64{100, -100}
+        g.particles.velocities[i] = [2]float64{1000000, 0}
     }
 
     return &g
