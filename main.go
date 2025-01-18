@@ -16,20 +16,32 @@ import (
 
 
 const (
-    screenWidth  = 1000
-    screenHeight = 1000
+    screenWidth  = 640
+    screenHeight = 640
     particleSize = 3
 
-    gridWidth    = 100
-    gridHeight   = 100
+    gridWidth    = 32
+    gridHeight   = 32
     numParticles = gridWidth * gridHeight * 4
     picRatio     = 0.05
     flipRatio    = 1 - picRatio
+
+    // TODO: cross-check scaling for the implicit dx=1
+    //       maybe add dx parameter and compare to other implementations
     gravity      = 980
+    density      = .001
     timeStep     = 0.01
+    solverTolerance = 0.000001
+    solverIterations = 1000
 
     widthScale = screenWidth / gridWidth
     heightScale = screenHeight / gridHeight
+
+    neighbourCountMask = 0b00000111
+    leftNeighbour = 1 << 3
+    rightNeighbour = 1 << 4
+    topNeighbour = 1 << 5
+    bottomNeighbour = 1 << 6
 )
 
 type ParticleSystem struct {
@@ -48,6 +60,7 @@ const (
 type Grid struct {
     width, height int
     cellContents [gridWidth][gridHeight]CellContent
+    neighbourInfo [gridWidth][gridHeight]uint8
     cellPressures [gridWidth][gridHeight]float64
     cellDivergences [gridWidth][gridHeight]float64
     horizontalEdgeVelocities [gridWidth+1][gridHeight]float64
@@ -148,6 +161,177 @@ func (g *Grid) ParticlesToGrid() {
     }
 }
 
+func (g *Grid) CalculateDivergences() {
+    for i := 0; i < gridWidth; i++ {
+        for j := 0; j < gridHeight; j++ {
+            g.cellDivergences[i][j] = 0
+        }
+    }
+    for i := 0; i < gridWidth; i++ {
+        for j := 0; j < gridHeight; j++ {
+            g.cellDivergences[i][j] = (g.verticalEdgeVelocities[i][j+1] - g.verticalEdgeVelocities[i][j] +
+                                       g.horizontalEdgeVelocities[i+1][j] - g.horizontalEdgeVelocities[i][j]) *
+                                        (-density) / timeStep
+        }
+    }
+}
+
+func (g *Grid) MultiplyNeighbourMatrix(vector *[gridWidth][gridHeight]float64,
+                                       output *[gridWidth][gridHeight]float64) {
+    var numNeighbours float64
+    for i := 1; i < gridWidth - 1; i++ {
+        for j := 1; j < gridHeight - 1; j++ {
+            if g.cellContents[i][j] != SOLID {
+                numNeighbours = float64(g.neighbourInfo[i][j] & neighbourCountMask)
+                output[i][j] = vector[i][j] * numNeighbours
+                if g.neighbourInfo[i][j] & leftNeighbour != 0 {
+                    output[i][j] -= vector[i-1][j]
+                }
+                if g.neighbourInfo[i][j] & rightNeighbour != 0 {
+                    output[i][j] -= vector[i+1][j]
+                }
+                if g.neighbourInfo[i][j] & bottomNeighbour != 0 {
+                    output[i][j] -= vector[i][j-1]
+                }
+                if g.neighbourInfo[i][j] & topNeighbour != 0 {
+                    output[i][j] -= vector[i][j+1]
+                }
+            }
+        }
+    }
+}
+
+func scalarProduct(a *[gridWidth][gridHeight]float64, b *[gridWidth][gridHeight]float64) float64 {
+    var result float64
+    for i := 0; i < gridWidth; i++ {
+        for j := 0; j < gridHeight; j++ {
+            result += a[i][j] * b[i][j]
+        }
+    }
+    return result
+}
+
+func (g *Grid) SolvePressure() {
+    // TODO: profile and optimise
+    // TODO: nothing moving is a solution, even if there is air below water
+    //       if the water gathers at the bottom it slowly compresses
+    //       in the compression case the solver never converges within the limit
+    var residual [gridWidth][gridHeight]float64
+    var stepDirection [gridWidth][gridHeight]float64
+    var sigma, sigmaOld, relTolerance, alpha, beta float64
+    for i := 0; i < gridWidth; i++ {
+        for j := 0; j < gridHeight; j++ {
+            g.cellPressures[i][j] = 0
+            stepDirection[i][j] = 0
+            if g.cellContents[i][j] == FLUID {
+                residual[i][j] = g.cellDivergences[i][j]
+            }
+        }
+    }
+    sigma = scalarProduct(&residual, &residual)
+    relTolerance = solverTolerance * sigma
+    for k := 0; k < solverIterations; k++ {
+        g.MultiplyNeighbourMatrix(&g.cellDivergences, &stepDirection)
+        alpha = sigma / scalarProduct(&g.cellDivergences, &stepDirection)
+        if isnan(alpha) {
+            print("solver diverged after ", k, " iterations\n")
+            panic("solver diverged")
+        }
+        for i := 1; i < gridWidth - 1; i++ {
+            for j := 1; j < gridHeight - 1; j++ {
+                if g.cellContents[i][j] == FLUID {
+                    g.cellPressures[i][j] += alpha * g.cellDivergences[i][j]
+                    residual[i][j] -= alpha * stepDirection[i][j]
+                }
+            }
+        }
+        sigmaOld = sigma
+        sigma = scalarProduct(&residual, &residual)
+        if sigma < relTolerance {
+            print("solver converged after ", k, " iterations\n")
+            return
+        }
+        beta = sigma / sigmaOld
+        for i := 1; i < gridWidth - 1; i++ {
+            for j := 1; j < gridHeight - 1; j++ {
+                if g.cellContents[i][j] == FLUID {
+                    g.cellDivergences[i][j] = residual[i][j] + beta * g.cellDivergences[i][j]
+                }
+            }
+        }
+    }
+    print("solver did not converge after ", solverIterations, " iterations\n")
+}
+
+func isnan(x float64) bool {
+    return x != x
+}
+
+func (g *Grid) CheckPressure() {
+    for i := 0; i < gridWidth; i++ {
+        for j := 0; j < gridHeight; j++ {
+            if g.cellContents[i][j] == FLUID {
+                if isnan(g.cellPressures[i][j]) {
+                    print("NaN pressure: ", i, " ", j, "\n")
+                }
+            }
+        }
+    }
+}
+
+func (g *Grid) ApplyPressure() {
+    for i := 1; i < gridWidth; i++ {
+        for j := 1; j < gridHeight; j++ {
+            if g.cellContents[i][j] == SOLID {
+                continue
+            }
+            if g.cellContents[i-1][j] == FLUID {
+                g.horizontalEdgeVelocities[i][j] -= (g.cellPressures[i][j] - g.cellPressures[i-1][j]) *
+                                                      timeStep / density
+            } else if g.cellContents[i-1][j] == EMPTY {
+                g.horizontalEdgeVelocities[i][j] -= g.cellPressures[i][j] * timeStep / density
+            }
+            if g.cellContents[i][j-1] == FLUID {
+                g.verticalEdgeVelocities[i][j] -= (g.cellPressures[i][j] - g.cellPressures[i][j-1]) *
+                                                    timeStep / density
+            } else if g.cellContents[i][j-1] == EMPTY {
+                g.verticalEdgeVelocities[i][j] -= g.cellPressures[i][j] * timeStep / density
+            }
+        }
+    }
+}
+
+func (g *Grid) UpdateNeighbourInfo() {
+    for i := 1; i < gridWidth - 1; i++ {
+        for j := 1; j < gridHeight - 1; j++ {
+            if g.cellContents[i][j] != FLUID {
+                continue
+            }
+            g.neighbourInfo[i][j] = 4
+            if g.cellContents[i-1][j] == SOLID {
+                g.neighbourInfo[i][j] -= 1
+            } else if g.cellContents[i-1][j] == FLUID {
+                g.neighbourInfo[i][j] |= leftNeighbour
+            }
+            if g.cellContents[i+1][j] == SOLID {
+                g.neighbourInfo[i][j] -= 1
+            } else if g.cellContents[i+1][j] == FLUID {
+                g.neighbourInfo[i][j] |= rightNeighbour
+            }
+            if g.cellContents[i][j-1] == SOLID {
+                g.neighbourInfo[i][j] -= 1
+            } else if g.cellContents[i][j-1] == FLUID {
+                g.neighbourInfo[i][j] |= bottomNeighbour
+            }
+            if g.cellContents[i][j+1] == SOLID {
+                g.neighbourInfo[i][j] -= 1
+            } else if g.cellContents[i][j+1] == FLUID {
+                g.neighbourInfo[i][j] |= topNeighbour
+            }
+        }
+    }
+}
+
 func interpolateGridVelocities(
     x, y float64,
     horizontalEdgeVelocities *[gridWidth+1][gridHeight]float64,
@@ -207,7 +391,9 @@ func (g *Grid) UpdateParticles() {
             print("position: ", x, " ", y, "\n")
             print("velocity: ", vx, " ", vy, "\n")
         }
-        if g.cellContents[cellY][cellX] == SOLID {
+        if (cellX < 0 || cellX > gridWidth - 1 ||
+            cellY < 0 || cellY > gridHeight - 1) ||
+            g.cellContents[cellX][cellY] == SOLID {
             vx := g.particles.velocities[i][0]
             vy := g.particles.velocities[i][1]
             previousCellX := int(x - vx * timeStep)
@@ -218,9 +404,13 @@ func (g *Grid) UpdateParticles() {
             yDirection := sign(cellDy)
             for cellShiftX := 0; cellShiftX <= abs(cellDx); cellShiftX++ {
                 for cellShiftY := 0; cellShiftY <= abs(cellDy); cellShiftY++ {
-                    if g.cellContents[cellY+cellShiftY][cellX+cellShiftX] != SOLID {
-                        newCellX := cellX + cellShiftX * xDirection
-                        newCellY := cellY + cellShiftY * yDirection
+                    newCellX := previousCellX + cellShiftX * xDirection
+                    newCellY := previousCellY + cellShiftY * yDirection
+                    if (newCellX < 0 || newCellX >= gridWidth ||
+                        newCellY < 0 || newCellY >= gridHeight) {
+                        continue
+                    }
+                    if g.cellContents[newCellX][newCellY] != SOLID {
                         if xDirection == -1 {
                             g.particles.positions[i][0] = float64(newCellX) + .99
                         } else if xDirection == 1 {
@@ -249,7 +439,10 @@ func (g *Grid) ApplyGravity() {
 }
 
 func (g *Grid) MakeIncompressible() {
-    // TODO
+    g.CalculateDivergences()
+    g.SolvePressure()
+    // g.CheckPressure()
+    g.ApplyPressure()
 }
 
 func (g *Grid) GridToParticles() {
@@ -277,6 +470,7 @@ func (g *Grid) GridToParticles() {
 
 func (g *Grid) Update() {
     g.ParticlesToGrid()
+    g.UpdateNeighbourInfo()
     g.ApplyGravity()
     g.ClampSolidCells()
     g.MakeIncompressible()
@@ -310,12 +504,12 @@ func NewGrid(width, height int) *Grid {
 
     // set cells on the edge to solid
     for i := 0; i < width; i++ {
-        g.cellContents[0][i] = SOLID
-        g.cellContents[height-1][i] = SOLID
+        g.cellContents[i][0] = SOLID
+        g.cellContents[i][height-1] = SOLID
     }
     for i := 0; i < height; i++ {
-        g.cellContents[i][0] = SOLID
-        g.cellContents[i][width-1] = SOLID
+        g.cellContents[0][i] = SOLID
+        g.cellContents[width-1][i] = SOLID
     }
 
     usableWidth := width - 2
