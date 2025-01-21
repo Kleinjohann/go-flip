@@ -90,28 +90,28 @@ func (g *Grid) Splat(x, y, vx, vy float64) {
     upperLeftWeight := (1-weightX) * shiftedWeightY
     upperRightWeight := weightX * shiftedWeightY
 
-    g.horizontalEdgeVelocities[cellX][shiftedCellY] += upperLeftWeight * vx
-    g.horizontalEdgeVelocities[cellX+1][shiftedCellY] += upperRightWeight * vx
-    g.horizontalEdgeVelocities[cellX][shiftedCellY+1] += lowerLeftWeight * vx
-    g.horizontalEdgeVelocities[cellX+1][shiftedCellY+1] += lowerRightWeight * vx
-    g.horizontalEdgeVelocityWeights[cellX][shiftedCellY] += upperLeftWeight
-    g.horizontalEdgeVelocityWeights[cellX+1][shiftedCellY] += upperRightWeight
-    g.horizontalEdgeVelocityWeights[cellX][shiftedCellY+1] += lowerLeftWeight
-    g.horizontalEdgeVelocityWeights[cellX+1][shiftedCellY+1] += lowerRightWeight
+    g.horizontalEdgeVelocities[cellX][shiftedCellY] += lowerLeftWeight * vx
+    g.horizontalEdgeVelocities[cellX+1][shiftedCellY] += lowerRightWeight * vx
+    g.horizontalEdgeVelocities[cellX][shiftedCellY+1] += upperLeftWeight * vx
+    g.horizontalEdgeVelocities[cellX+1][shiftedCellY+1] += upperRightWeight * vx
+    g.horizontalEdgeVelocityWeights[cellX][shiftedCellY] += lowerLeftWeight
+    g.horizontalEdgeVelocityWeights[cellX+1][shiftedCellY] += lowerRightWeight
+    g.horizontalEdgeVelocityWeights[cellX][shiftedCellY+1] += upperLeftWeight
+    g.horizontalEdgeVelocityWeights[cellX+1][shiftedCellY+1] += upperRightWeight
 
     lowerLeftWeight = (1-shiftedWeightX) * (1-weightY)
     lowerRightWeight = shiftedWeightX * (1-weightY)
     upperLeftWeight = (1-shiftedWeightX) * weightY
     upperRightWeight = shiftedWeightX * weightY
 
-    g.verticalEdgeVelocities[shiftedCellX][cellY] += upperLeftWeight * vy
-    g.verticalEdgeVelocities[shiftedCellX+1][cellY] += upperRightWeight * vy
-    g.verticalEdgeVelocities[shiftedCellX][cellY+1] += lowerLeftWeight * vy
-    g.verticalEdgeVelocities[shiftedCellX+1][cellY+1] += lowerRightWeight * vy
-    g.verticalEdgeVelocityWeights[shiftedCellX][cellY] += upperLeftWeight
-    g.verticalEdgeVelocityWeights[shiftedCellX+1][cellY] += upperRightWeight
-    g.verticalEdgeVelocityWeights[shiftedCellX][cellY+1] += lowerLeftWeight
-    g.verticalEdgeVelocityWeights[shiftedCellX+1][cellY+1] += lowerRightWeight
+    g.verticalEdgeVelocities[shiftedCellX][cellY] += lowerLeftWeight * vy
+    g.verticalEdgeVelocities[shiftedCellX+1][cellY] += lowerRightWeight * vy
+    g.verticalEdgeVelocities[shiftedCellX][cellY+1] += upperLeftWeight * vy
+    g.verticalEdgeVelocities[shiftedCellX+1][cellY+1] += upperRightWeight * vy
+    g.verticalEdgeVelocityWeights[shiftedCellX][cellY] += lowerLeftWeight
+    g.verticalEdgeVelocityWeights[shiftedCellX+1][cellY] += lowerRightWeight
+    g.verticalEdgeVelocityWeights[shiftedCellX][cellY+1] += upperLeftWeight
+    g.verticalEdgeVelocityWeights[shiftedCellX+1][cellY+1] += upperRightWeight
 }
 
 func (g *Grid) ClampSolidCells() {
