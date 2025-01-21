@@ -28,8 +28,8 @@ const (
     flipRatio    = 1 - picRatio
 
     gravity      = 980
-    density      = .001
     timeStep     = 0.01
+
     resetDistance = 0.1 // distance from solid cells to reset particles entering them
     solverTolerance = 0.000001
     solverIterations = 1000
@@ -171,9 +171,10 @@ func (g *Grid) CalculateDivergences() {
     }
     for i := 0; i < gridWidth; i++ {
         for j := 0; j < gridHeight; j++ {
-            g.cellDivergences[i][j] = (g.verticalEdgeVelocities[i][j+1] - g.verticalEdgeVelocities[i][j] +
-                                       g.horizontalEdgeVelocities[i+1][j] - g.horizontalEdgeVelocities[i][j]) *
-                                        (-density) / timeStep
+            if g.cellContents[i][j] == FLUID {
+                g.cellDivergences[i][j] = -g.verticalEdgeVelocities[i][j+1] + g.verticalEdgeVelocities[i][j] -
+                                          g.horizontalEdgeVelocities[i+1][j] + g.horizontalEdgeVelocities[i][j]
+            }
         }
     }
 }
@@ -267,32 +268,33 @@ func isnan(x float64) bool {
 func (g *Grid) ClampPressure() {
     for i := 0; i < gridWidth; i++ {
         for j := 0; j < gridHeight; j++ {
-            if g.cellContents[i][j] == FLUID {
-                if g.cellPressures[i][j] < 0 {
-                    g.cellPressures[i][j] = 0
-                }
+            if g.cellPressures[i][j] < 0 {
+                g.cellPressures[i][j] = 0
             }
         }
     }
 }
 
 func (g *Grid) ApplyPressure() {
+    var pressure float64
     for i := 1; i < gridWidth; i++ {
         for j := 1; j < gridHeight; j++ {
             if g.cellContents[i][j] == SOLID {
                 continue
             }
+            pressure = 0.0
+            if g.cellContents[i][j] == FLUID {
+                pressure = g.cellPressures[i][j]
+            }
             if g.cellContents[i-1][j] == FLUID {
-                g.horizontalEdgeVelocities[i][j] -= (g.cellPressures[i][j] - g.cellPressures[i-1][j]) *
-                                                      timeStep / density
+                g.horizontalEdgeVelocities[i][j] -= (pressure - g.cellPressures[i-1][j])
             } else if g.cellContents[i-1][j] == EMPTY {
-                g.horizontalEdgeVelocities[i][j] -= g.cellPressures[i][j] * timeStep / density
+                g.horizontalEdgeVelocities[i][j] -= pressure
             }
             if g.cellContents[i][j-1] == FLUID {
-                g.verticalEdgeVelocities[i][j] -= (g.cellPressures[i][j] - g.cellPressures[i][j-1]) *
-                                                    timeStep / density
+                g.verticalEdgeVelocities[i][j] -= (pressure - g.cellPressures[i][j-1])
             } else if g.cellContents[i][j-1] == EMPTY {
-                g.verticalEdgeVelocities[i][j] -= g.cellPressures[i][j] * timeStep / density
+                g.verticalEdgeVelocities[i][j] -= pressure
             }
         }
     }
