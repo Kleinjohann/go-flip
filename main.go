@@ -376,6 +376,7 @@ func abs(x int) int {
 }
 
 func (g *Grid) UpdateParticles() {
+    particleLoop:
     for i := 0; i < numParticles; i++ {
         vx := g.particles.velocities[i][0]
         vy := g.particles.velocities[i][1]
@@ -415,7 +416,7 @@ func (g *Grid) UpdateParticles() {
                         } else if yDirection == 1 {
                             g.particles.positions[i][1] = float64(newCellY) + 1 - resetDistance
                         }
-                        return
+                        continue particleLoop
                     }
                 }
             }
