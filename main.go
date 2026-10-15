@@ -129,8 +129,6 @@ func (g *Grid) ClampSolidCells() {
 
 func (g *Grid) ParticlesToGrid() {
     var x, y, vx, vy float64
-    g.previousHorizontalEdgeVelocities = g.horizontalEdgeVelocities
-    g.previousVerticalEdgeVelocities = g.verticalEdgeVelocities
     g.horizontalEdgeVelocities = [gridWidth+1][gridHeight]float64{}
     g.verticalEdgeVelocities = [gridWidth][gridHeight+1]float64{}
 	g.horizontalEdgeVelocityWeights = [gridWidth+1][gridHeight]float64{}
@@ -163,6 +161,8 @@ func (g *Grid) ParticlesToGrid() {
             }
         }
     }
+    g.previousHorizontalEdgeVelocities = g.horizontalEdgeVelocities
+    g.previousVerticalEdgeVelocities = g.verticalEdgeVelocities
 }
 
 func (g *Grid) CalculateDivergences() {
