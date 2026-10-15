@@ -27,7 +27,7 @@ const (
     picRatio     = 0.05
     flipRatio    = 1 - picRatio
 
-    gravity      = 980
+    gravity      = 49
     timeStep     = 0.01
 
     resetDistance = 0.1 // distance from solid cells to reset particles entering them
@@ -133,6 +133,8 @@ func (g *Grid) ParticlesToGrid() {
     g.previousVerticalEdgeVelocities = g.verticalEdgeVelocities
     g.horizontalEdgeVelocities = [gridWidth+1][gridHeight]float64{}
     g.verticalEdgeVelocities = [gridWidth][gridHeight+1]float64{}
+	g.horizontalEdgeVelocityWeights = [gridWidth+1][gridHeight]float64{}
+	g.verticalEdgeVelocityWeights = [gridWidth][gridHeight+1]float64{}
     for i := 1; i < gridWidth - 1; i++ {
         for j := 1; j < gridHeight - 1; j++ {
             if g.cellContents[i][j] == FLUID {
@@ -517,7 +519,7 @@ func NewGrid(width, height int) *Grid {
     for i := 0; i < numParticles; i++ {
         g.particles.positions[i] = [2]float64{(initMinHeight + (1-initMinHeight)*rand.Float64()) * float64(usableWidth) + 1,
                                              (initMinHeight + (1-initMinHeight)*rand.Float64()) * float64(usableHeight) + 1}
-        g.particles.velocities[i] = [2]float64{1000000, 0}
+        g.particles.velocities[i] = [2]float64{0, 0}
     }
 
     return &g
