@@ -443,27 +443,31 @@ func (g *Grid) MakeIncompressible() {
 }
 
 func (g *Grid) GridToParticles() {
-    var x, y, vx, vy, vOldX, vOldY, vPicX, vPicY, vFlipX, vFlipY float64
     for i := 0; i < numParticles; i++ {
-        x = g.particles.positions[i][0]
-        y = g.particles.positions[i][1]
-        vx = g.particles.velocities[i][0]
-        vy = g.particles.velocities[i][1]
-        vOldX, vOldY = interpolateGridVelocities(
+        x := g.particles.positions[i][0]
+        y := g.particles.positions[i][1]
+
+        oldGridX, oldGridY := interpolateGridVelocities(
             x, y,
             &g.previousHorizontalEdgeVelocities,
-            &g.previousVerticalEdgeVelocities)
-        vFlipX, vFlipY = interpolateGridVelocities(
+            &g.previousVerticalEdgeVelocities,
+        )
+
+        picX, picY := interpolateGridVelocities(
             x, y,
             &g.horizontalEdgeVelocities,
-            &g.verticalEdgeVelocities)
-        vPicX = vx + vFlipX - vOldX
-        vPicY = vy + vFlipY - vOldY
-        g.particles.velocities[i][0] = flipRatio * vFlipX + picRatio * vPicX
-        g.particles.velocities[i][1] = flipRatio * vFlipY + picRatio * vPicY
+            &g.verticalEdgeVelocities,
+        )
+
+        flipX := g.particles.velocities[i][0] + picX - oldGridX
+        flipY := g.particles.velocities[i][1] + picY - oldGridY
+
+        g.particles.velocities[i][0] =
+            picRatio*picX + flipRatio*flipX
+        g.particles.velocities[i][1] =
+            picRatio*picY + flipRatio*flipY
     }
 }
-
 
 func (g *Grid) Update() {
     g.ParticlesToGrid()
